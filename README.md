@@ -23,9 +23,10 @@ Automated **Prowler** security scanning for AWS using SSO profiles on Linux (Deb
 3. Run the scan: ./prowlerscan-aws-sso my-infra
 
 4. After the scan, open the HTML report or compliance folder:
+   
    🌐 View the report in your browser:
     file:///tmp/prowlerscan-out-YYYYMMDD-HHMMSS/output/prowler-output-....html
-  📊 Detailed compliance results archived at:
+   📊 Detailed compliance results archived at:
     file:///tmp/prowlerscan-out-YYYYMMDD-HHMMSS/output/compliance/
 
 ### Requirements
