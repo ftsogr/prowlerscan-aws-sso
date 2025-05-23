@@ -1,0 +1,149 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# === Usage Help ===
+if [[ $# -lt 1 ]]; then
+  echo "Usage: $0 <aws-profile-name>"
+  echo "Example: $0 my-infra"
+  exit 1
+fi
+
+# === Config ===
+PRFL="$1"
+VENV_DIR="$HOME/.venvs/prowler"
+PROWLER_DIR="$HOME/prowler"
+PYTHON_BIN="python3"
+TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
+ARCHIVE_DIR="/tmp/prowlerscan-out-$TIMESTAMP"
+
+echo "🧩 Using AWS profile: $PRFL"
+
+# === Detect Distro and Install System Packages ===
+if [ -f /etc/os-release ]; then
+  . /etc/os-release
+  OS_FAMILY="$ID"
+else
+  OS_FAMILY="unknown"
+fi
+
+echo "📦 Installing required system packages for $OS_FAMILY..."
+
+if [[ "$OS_FAMILY" =~ (ubuntu|debian) ]]; then
+  sudo apt update
+  sudo apt install -y \
+    $PYTHON_BIN \
+    python3-venv \
+    python3-pip \
+    unzip \
+    curl \
+    git \
+    expect \
+    build-essential \
+    python3-dev \
+    libffi-dev \
+    libssl-dev
+elif [[ "$OS_FAMILY" =~ (rhel|centos|fedora|almalinux|rocky) ]]; then
+  sudo yum install -y \
+    $PYTHON_BIN \
+    python3-venv \
+    python3-pip \
+    unzip \
+    curl \
+    git \
+    expect \
+    python3-devel \
+    libffi-devel \
+    openssl-devel
+  sudo yum groupinstall -y "Development Tools"
+else
+  echo "⚠ Unsupported or unrecognized OS. Please install dependencies manually."
+  exit 1
+fi
+
+# === Install AWS CLI v2 if Missing ===
+if ! command -v aws &>/dev/null; then
+  echo "🌐 Installing AWS CLI v2..."
+  TMPDIR=$(mktemp -d)
+  curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "$TMPDIR/awscliv2.zip"
+  unzip -q "$TMPDIR/awscliv2.zip" -d "$TMPDIR"
+  sudo "$TMPDIR/aws/install"
+  rm -rf "$TMPDIR"
+fi
+
+echo "✅ AWS CLI version: $(aws --version)"
+
+# === Login to AWS SSO ===
+echo "🔐 Logging into AWS SSO for profile: $PRFL"
+aws sso login --profile "$PRFL"
+
+# === Optional: Clear SSO Token Cache ===
+rm -f ~/.aws/cli/cache/*.json || true
+
+# === Verify Auth ===
+aws sts get-caller-identity --profile "$PRFL"
+
+# === Clone Prowler if Needed ===
+if [ ! -d "$PROWLER_DIR" ]; then
+  echo "📥 Cloning Prowler repository..."
+  git clone https://github.com/prowler-cloud/prowler "$PROWLER_DIR"
+fi
+
+# === Create and Activate Virtual Environment ===
+if [ ! -d "$VENV_DIR" ]; then
+  echo "🐍 Creating Python virtual environment..."
+  $PYTHON_BIN -m venv "$VENV_DIR"
+fi
+
+echo "🔁 Activating virtual environment..."
+source "$VENV_DIR/bin/activate"
+
+# === Install Poetry if Missing ===
+if ! command -v poetry &>/dev/null; then
+  echo "📦 Installing Poetry..."
+  pip install poetry
+fi
+
+cd "$PROWLER_DIR"
+
+echo "📦 Installing Prowler dependencies..."
+poetry install
+
+# === Run Prowler Scan, show progress and log ===
+echo "🚀 Running Prowler scan for AWS profile: $PRFL"
+PROWLER_LOG="$ARCHIVE_DIR/prowler.log"
+mkdir -p "$ARCHIVE_DIR"
+
+set +e
+unbuffer poetry run python prowler-cli.py -M html --profile "$PRFL" 2>&1 | tee "$PROWLER_LOG"
+PROWLER_EXIT_CODE=${PIPESTATUS[0]}
+set -e
+
+# === Archive full output directory ===
+HTML_REPORT=""
+if [ -d "$PROWLER_DIR/output" ]; then
+  cp -r "$PROWLER_DIR/output" "$ARCHIVE_DIR"
+  HTML_REPORT=$(find "$ARCHIVE_DIR/output" -name "*.html" | head -n1)
+fi
+
+# === Deactivate Python virtualenv and clean working dirs ===
+deactivate || true
+rm -rf "$VENV_DIR"
+rm -rf "$PROWLER_DIR"
+
+# === Print summary (not Prowler's trailing message) ===
+if [ -n "$HTML_REPORT" ]; then
+  echo "🌐 View the report in your browser:"
+  echo "file://$HTML_REPORT"
+fi
+
+if [ -d "$ARCHIVE_DIR/output/compliance" ]; then
+  echo "📊 Detailed compliance results archived at:"
+  echo "file://$ARCHIVE_DIR/output/compliance/"
+fi
+
+#if [ "$PROWLER_EXIT_CODE" -ne 0 ]; then
+#  echo "❌ Prowler exited with error code $PROWLER_EXIT_CODE. See $PROWLER_LOG for details."
+#fi
+
+echo "✅ Done. All results saved in: $ARCHIVE_DIR"
