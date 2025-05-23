@@ -1,6 +1,6 @@
 # prowlerscan-aws-sso
 
-Automated **Prowler** security scanning for AWS using SSO profiles on Linux (Debian/Ubuntu and RedHat-based distros).
+Automated **Prowler** security scanning for **AWS** using SSO profiles on Linux (Debian/Ubuntu and RedHat-based distros).
 
 ## Features
 
