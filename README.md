@@ -16,7 +16,7 @@ Automated **Prowler** security scanning for AWS using SSO profiles on Linux (Deb
    ```sh
    git clone <this-repo-url>
    cd <repo-directory>
-   chmod +x prowlerscan-aws-sso```
+   chmod +x prowlerscan-aws-sso
 
 2. Make sure you have an AWS SSO profile configured.
 
