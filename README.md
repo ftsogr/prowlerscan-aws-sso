@@ -20,7 +20,11 @@ Automated **Prowler** security scanning for **AWS** using SSO profiles on Linux.
 
 2. Make sure you have an AWS SSO profile configured.
 
-3. Run the scan: ./prowlerscan-aws-sso my-infra
+3. Run the scan:
+   ```
+   ./prowlerscan-aws-sso my-infra
+   ```
+   my-infra=AWS Profile
 
 4. After the scan, open the HTML report or compliance folder:
    ```
